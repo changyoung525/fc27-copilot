@@ -16,6 +16,8 @@ class GallerySyncTests(unittest.TestCase):
                 {"card_ea_id": 11, "is_collected": False},
                 {"card_ea_id": 12, "is_collected": True, "grading_score": 500},
             ]},
+            FC27Error("BRIDGE_TIMEOUT", "Browser stopped responding.", retryable=True),
+            FC27Error("BRIDGE_NOT_CONNECTED", "Browser is reconnecting.", retryable=True),
             {"cards": [{"card_ea_id": 13, "is_collected": True}]},
             {"cards": []},
             FC27Error("EA_PERSONA_CHANGED", "EA Persona changed."),
@@ -34,7 +36,8 @@ class GallerySyncTests(unittest.TestCase):
             self.assertEqual(first["total"], 2)
             self.assertEqual(first["cards"][0]["grading_score"], 500)
             self.assertEqual(first["next_offset"], 1)
-            self.assertEqual([call.args[1]["offset"] for call in read.call_args_list], [0, 2, 3])
+            self.assertEqual([call.args[1]["offset"] for call in read.call_args_list], [0, 2, 2, 2, 3])
+            self.assertNotIn("retrying_offset", first["sync"])
 
             sync._sync(runtime)
             saved = sync.query(runtime, 1, 1)

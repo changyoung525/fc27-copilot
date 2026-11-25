@@ -43,7 +43,8 @@ async function refreshGallery(){
   const snapshot=snapshot_at===null?'':' Last saved: '+total+' cards ('+snapshot_at+').';
   syncGallery.disabled=sync.state==='running';
   if(sync.state==='running'){
-    galleryStatus.textContent='Syncing Gallery… '+sync.scanned+' cards checked.'+snapshot;
+    const progress=sync.retrying_offset==null?'Syncing Gallery… ':'Reconnecting to the Web App… ';
+    galleryStatus.textContent=progress+sync.scanned+' cards checked.'+snapshot;
   }else if(sync.state==='failed'){
     galleryStatus.textContent=sync.error.message+snapshot;
   }else{

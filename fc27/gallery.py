@@ -8,6 +8,13 @@ from .errors import FC27Error
 from .runtime import utc_now
 
 
+PAGE_RETRY_DELAYS = (2, 5)
+TRANSIENT_PAGE_ERRORS = {
+    "BRIDGE_NOT_CONNECTED", "BRIDGE_TIMEOUT", "CONTENT_BRIDGE_UNREACHABLE",
+    "PAGE_BRIDGE_TIMEOUT", "EA_SERVICE_TIMEOUT",
+}
+
+
 class GallerySync:
     def __init__(self, browser_read):
         self.browser_read = browser_read
@@ -86,7 +93,7 @@ class GallerySync:
         offset = 0
         has_collection_flags = False
         for _ in range(500):
-            page = self.browser_read("getGalleryPage", {"persona_id": persona_id, "offset": offset})
+            page = self._read_page(persona_id, offset)
             rows = page.get("cards") if isinstance(page, dict) else None
             if not isinstance(rows, list):
                 break
@@ -114,4 +121,21 @@ class GallerySync:
             "GALLERY_SCAN_INCOMPLETE",
             "EA did not provide a complete card scan with Gallery collection flags.",
             retryable=True,
+            details={"offset": offset, "scanned": len(seen)},
         )
+
+    def _read_page(self, persona_id, offset):
+        params = {"persona_id": persona_id, "offset": offset}
+        for delay in (*PAGE_RETRY_DELAYS, None):
+            try:
+                result = self.browser_read("getGalleryPage", params)
+            except FC27Error as error:
+                if delay is None or error.code not in TRANSIENT_PAGE_ERRORS:
+                    raise
+                with self._lock:
+                    self._job["retrying_offset"] = offset
+                time.sleep(delay)
+            else:
+                with self._lock:
+                    self._job.pop("retrying_offset", None)
+                return result
