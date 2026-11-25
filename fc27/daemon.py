@@ -536,7 +536,10 @@ class FC27Daemon:
         }
 
     def _browser_tool(self, method, params):
-        response = self.bridge.call(method, params)
+        if method == "getGalleryPage":
+            response = self.bridge.call(method, params, timeout_seconds=90)
+        else:
+            response = self.bridge.call(method, params)
         if not response.get("ok", False):
             error = response.get("error") or {}
             raise FC27Error(

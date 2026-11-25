@@ -34,7 +34,8 @@ class BrowserBridge:
         request_id = str(uuid.uuid4())
         pending = PendingRequest()
         with self._condition:
-            if not self._is_connected_locked():
+            connection_window = max(self.connected_window_seconds, timeout_seconds)
+            if time.time() - self._browser_last_seen >= connection_window:
                 raise FC27Error(
                     "BRIDGE_NOT_CONNECTED",
                     "The local browser bridge is not connected.",

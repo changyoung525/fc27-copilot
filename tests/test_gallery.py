@@ -65,6 +65,20 @@ class GallerySyncTests(unittest.TestCase):
         self.assertEqual(raised.exception.details["reason"], "pagination_did_not_advance")
 
     @patch("fc27.gallery.time.sleep")
+    def test_resumes_failed_scan_from_saved_page_offset(self, _sleep):
+        first = {"cards": [{"card_ea_id": 11, "is_collected": True}]}
+        timeout = FC27Error("BRIDGE_TIMEOUT", "Browser stopped responding.")
+        read = Mock(side_effect=[first, timeout, timeout, timeout, {"cards": []}])
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Path(directory) / "gallery-progress.json"
+            with self.assertRaises(FC27Error):
+                GallerySync(read)._read("123", checkpoint)
+            cards, scanned = GallerySync(read)._read("123", checkpoint)
+            self.assertEqual(scanned, 1)
+            self.assertEqual(cards, first["cards"])
+            self.assertEqual([call.args[1]["offset"] for call in read.call_args_list], [0, 1, 1, 1, 1])
+
+    @patch("fc27.gallery.time.sleep")
     def test_does_not_commit_when_collection_flags_are_missing(self, _sleep):
         sync = GallerySync(Mock(side_effect=[
             {"cards": [{"card_ea_id": 11, "is_collected": None}]},

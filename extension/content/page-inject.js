@@ -1687,7 +1687,7 @@
       }
       const criteria = new globalThis.UTSearchCriteriaDTO();
       criteria.type = globalThis.SearchType.PLAYER;
-      criteria.count = 91;
+      criteria.count = 200;
       criteria.offset = params.offset;
       // The Web App drops these fields when it builds concept item entities.
       const factory = globalThis.UTItemEntityFactory?.prototype;

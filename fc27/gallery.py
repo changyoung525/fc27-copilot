@@ -63,20 +63,13 @@ class GallerySync:
 
     def _sync(self, runtime):
         try:
-            cards, scanned = self._read(runtime.persona_id)
+            checkpoint = runtime.path.with_name("gallery-progress.json")
+            cards, scanned = self._read(runtime.persona_id, checkpoint)
             snapshot_at = utc_now()
-            path = self._path(runtime)
-            with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8", dir=path.parent, delete=False
-            ) as output:
-                temporary_path = output.name
-                try:
-                    json.dump({"snapshot_at": snapshot_at, "scanned": scanned, "cards": cards}, output)
-                    output.close()
-                    os.replace(temporary_path, path)
-                finally:
-                    if os.path.exists(temporary_path):
-                        os.unlink(temporary_path)
+            self._write_json(self._path(runtime), {
+                "snapshot_at": snapshot_at, "scanned": scanned, "cards": cards,
+            })
+            checkpoint.unlink(missing_ok=True)
             outcome = {"state": "complete", "snapshot_at": snapshot_at, "total": len(cards)}
         except FC27Error as error:
             outcome = {"state": "failed", "error": error.as_dict()}
@@ -87,16 +80,53 @@ class GallerySync:
         with self._lock:
             self._job.update(outcome)
 
-    def _read(self, persona_id):
-        seen = set()
-        collected = {}
-        offset = 0
-        has_collection_flags = False
-        advancing_pages = 0
-        repeated_page = False
+    @staticmethod
+    def _write_json(path, data):
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, delete=False
+        ) as output:
+            temporary_path = output.name
+            try:
+                json.dump(data, output)
+                output.close()
+                os.replace(temporary_path, path)
+            finally:
+                if os.path.exists(temporary_path):
+                    os.unlink(temporary_path)
+
+    def _read(self, persona_id, checkpoint=None):
+        progress = {}
+        if checkpoint is not None:
+            try:
+                if time.time() - checkpoint.stat().st_mtime < 1800:
+                    progress = json.loads(checkpoint.read_text(encoding="utf-8"))
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass
+        seen = set(progress.get("seen", []))
+        collected = {row["card_ea_id"]: row for row in progress.get("collected", [])}
+        offset = progress.get("offset", 0)
+        has_collection_flags = progress.get("has_collection_flags", False)
+        advancing_pages = progress.get("advancing_pages", 0)
+        repeated_page = progress.get("repeated_page", False)
+
+        def save_progress():
+            if checkpoint is not None:
+                self._write_json(checkpoint, {
+                    "seen": sorted(seen), "collected": list(collected.values()), "offset": offset,
+                    "has_collection_flags": has_collection_flags, "advancing_pages": advancing_pages,
+                    "repeated_page": repeated_page,
+                })
+
+        with self._lock:
+            self._job.update(scanned=len(seen), collected=len(collected))
         end_reason = "page_limit"
-        for _ in range(500):
-            page = self._read_page(persona_id, offset)
+        for page_number in range(500):
+            try:
+                page = self._read_page(persona_id, offset)
+            except FC27Error as error:
+                if error.code in TRANSIENT_PAGE_ERRORS:
+                    save_progress()
+                raise
             rows = page.get("cards") if isinstance(page, dict) else None
             if not isinstance(rows, list):
                 end_reason = "missing_cards"
@@ -133,7 +163,11 @@ class GallerySync:
             offset += len(rows)
             with self._lock:
                 self._job.update(scanned=len(seen), collected=len(collected))
+            if page_number % 10 == 9:
+                save_progress()
             time.sleep(0.9)
+        if checkpoint is not None:
+            checkpoint.unlink(missing_ok=True)
         raise FC27Error(
             "GALLERY_SCAN_INCOMPLETE",
             "EA did not provide a complete card scan with Gallery collection flags.",
