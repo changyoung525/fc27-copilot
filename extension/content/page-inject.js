@@ -1689,7 +1689,29 @@
       criteria.type = globalThis.SearchType.PLAYER;
       criteria.count = 91;
       criteria.offset = params.offset;
-      const response = await observeOnce(appServices.Item.searchConceptItems(criteria), 18000);
+      // The Web App drops these fields when it builds concept item entities.
+      const factory = globalThis.UTItemEntityFactory?.prototype;
+      const createItem = factory?.createItem;
+      const galleryFields = new WeakMap();
+      let capture = true;
+      function captureGalleryFields(rawItem) {
+        const entity = Reflect.apply(createItem, this, arguments);
+        if (capture && entity && typeof rawItem?.isCollected === 'boolean') {
+          galleryFields.set(entity, {
+            is_collected: rawItem.isCollected,
+            grading_score: readValue(rawItem, ['gradingScore']),
+          });
+        }
+        return entity;
+      }
+      let response;
+      if (typeof createItem === 'function') factory.createItem = captureGalleryFields;
+      try {
+        response = await observeOnce(appServices.Item.searchConceptItems(criteria), 18000);
+      } finally {
+        capture = false;
+        if (factory?.createItem === captureGalleryFields) factory.createItem = createItem;
+      }
       await assertPersona();
       const items = response.response?.items ?? response.data?.items;
       if (!Array.isArray(items)) {
@@ -1700,8 +1722,10 @@
           const { card_ea_id, rating, nation_id, league_id, club_id, rarity_id } = serializeItem(item);
           return {
             card_ea_id, rating, nation_id, league_id, club_id, rarity_id,
-            grading_score: readValue(item, ['gradingScore']),
-            is_collected: typeof item?.isCollected === 'boolean' ? item.isCollected : null,
+            ...(galleryFields.get(item) ?? {
+              grading_score: readValue(item, ['gradingScore']),
+              is_collected: typeof item?.isCollected === 'boolean' ? item.isCollected : null,
+            }),
           };
         }),
       };
