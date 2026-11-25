@@ -25,20 +25,19 @@ const health=document.getElementById('health');
 const syncGallery=document.getElementById('syncGallery');
 const galleryStatus=document.getElementById('galleryStatus');
 let startingGallery=false;
-async function galleryTool(name, args={}){
-  const response=await fetch('/mcp',{
+async function galleryTool(action){
+  const response=await fetch('/gallery/'+action,{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}}),
+    body:'{}',
   });
-  const reply=await response.json();
-  const result=reply.result?.structuredContent;
-  if(!result?.ok) throw new Error(result?.error?.message ?? reply.error?.message ?? 'Gallery request failed.');
+  const result=await response.json();
+  if(!result.ok) throw new Error(result.error?.message ?? 'Gallery request failed.');
   return result.data;
 }
 async function refreshGallery(){
   if(startingGallery) return;
-  const data=await galleryTool('gallery_query',{limit:1});
+  const data=await galleryTool('status');
   if(startingGallery) return;
   const {sync,snapshot_at,total}=data;
   const snapshot=snapshot_at===null?'':' Last saved: '+total+' cards ('+snapshot_at+').';
@@ -56,7 +55,7 @@ syncGallery.addEventListener('click',async()=>{
   syncGallery.disabled=true;
   galleryStatus.textContent='Starting Gallery sync…';
   try{
-    await galleryTool('sync_gallery');
+    await galleryTool('sync');
   }catch(error){
     galleryStatus.textContent=error.message;
     syncGallery.disabled=false;

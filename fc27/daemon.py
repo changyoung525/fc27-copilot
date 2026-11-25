@@ -684,6 +684,20 @@ class FC27RequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.path in {"/gallery/sync", "/gallery/status"}:
+                host = self.headers.get("Host", "").lower()
+                if (
+                    host.split(":", 1)[0] not in {"127.0.0.1", "localhost"}
+                    or self.headers.get("Origin") != f"http://{host}"
+                    or self.headers.get_content_type() != "application/json"
+                ):
+                    self._json(403, {"ok": False, "error": {"message": "Open the local FC27 status page."}})
+                    return
+                self._read_json()
+                name = "sync_gallery" if self.path == "/gallery/sync" else "gallery_query"
+                arguments = {} if name == "sync_gallery" else {"limit": 1}
+                self._json(200, self.server.fc27.call_tool(name, arguments))
+                return
             payload = self._read_json()
             if self.path == "/browser/respond":
                 accepted = self.server.fc27.bridge.respond(
