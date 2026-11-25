@@ -884,6 +884,21 @@ TOOLS = [
         },
     ),
     tool(
+        "sync_gallery",
+        "Start a background Gallery collection refresh from the signed-in EA Web App. Poll gallery_query for the result. The refresh saves registered card IDs and card grading scores locally.",
+        object_schema(),
+        {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
+    ),
+    tool(
+        "gallery_query",
+        "Read Gallery sync progress and a page of registered cards from the latest successful local snapshot. Use next_offset to read additional cards.",
+        object_schema({
+            "offset": described({"type": "integer", "minimum": 0, "default": 0}, "Start at this zero-based position."),
+            "limit": described({"type": "integer", "minimum": 1, "maximum": 200, "default": 50}, "Maximum registered cards to return."),
+        }),
+        {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+    ),
+    tool(
         "sync_club",
         "Refresh coins and owned items from the authenticated Web App into the local account database. Use after an account change, stale inventory, or an error requesting synchronization; login and successful writes normally synchronize automatically. Returns per-area completeness, counts, changes, and the owned-item state version; unchanged inventory retains its version. Commits only after every required area completes and does not buy, sell, or consume EA items.",
         object_schema(

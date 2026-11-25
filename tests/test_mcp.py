@@ -203,7 +203,7 @@ class MCPTest(unittest.TestCase):
     def test_tools_list_contains_exact_catalog(self):
         response = self.daemon.mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
         names = [tool["name"] for tool in response["result"]["tools"]]
-        self.assertEqual(len(TOOLS), 12)
+        self.assertEqual(len(TOOLS), 14)
         self.assertEqual(names, [tool["name"] for tool in TOOLS])
         self.assertIn("sbc_refresh", names)
         self.assertNotIn("catalog_refresh", names)

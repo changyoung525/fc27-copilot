@@ -1671,6 +1671,42 @@
       };
     },
 
+    async getGalleryPage(params) {
+      const appServices = requireWebAppServices();
+      const assertPersona = async () => {
+        const identity = await methods.getIdentity();
+        if (identity.persona_id !== params.persona_id) {
+          throw Object.assign(new Error('EA Persona changed during Gallery sync.'), { code: 'EA_PERSONA_CHANGED' });
+        }
+      };
+      await assertPersona();
+      if (typeof appServices.Item?.searchConceptItems !== 'function' ||
+          typeof globalThis.UTSearchCriteriaDTO !== 'function' ||
+          globalThis.SearchType?.PLAYER == null) {
+        throw Object.assign(new Error('FC27 concept search is unavailable.'), { code: 'EA_GALLERY_UNAVAILABLE' });
+      }
+      const criteria = new globalThis.UTSearchCriteriaDTO();
+      criteria.type = globalThis.SearchType.PLAYER;
+      criteria.count = 91;
+      criteria.offset = params.offset;
+      const response = await observeOnce(appServices.Item.searchConceptItems(criteria), 18000);
+      await assertPersona();
+      const items = response.response?.items ?? response.data?.items;
+      if (!Array.isArray(items)) {
+        throw Object.assign(new Error('EA returned an unexpected Gallery response.'), { code: 'EA_GALLERY_RESPONSE_INVALID' });
+      }
+      return {
+        cards: items.map(item => {
+          const { card_ea_id, rating, nation_id, league_id, club_id, rarity_id } = serializeItem(item);
+          return {
+            card_ea_id, rating, nation_id, league_id, club_id, rarity_id,
+            grading_score: readValue(item, ['gradingScore']),
+            is_collected: typeof item?.isCollected === 'boolean' ? item.isCollected : null,
+          };
+        }),
+      };
+    },
+
     async getUnassigned() {
       const appServices = requireWebAppServices();
       const response = await observeOnce(appServices.Item.requestUnassignedItems());

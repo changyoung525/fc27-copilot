@@ -15,6 +15,7 @@ from .catalog import CatalogDB
 from .content import ContentService, FutggContentClient
 from .errors import FC27Error
 from .execution import ExecutionService
+from .gallery import GallerySync
 from .mcp import MCPServer
 from .market import MarketService
 from .policy import PolicyStore
@@ -50,6 +51,7 @@ class FC27Daemon:
         self.policy = PolicyStore(policy_path or project_root / "policy.json")
         self.content = ContentService()
         self.squads = SquadService()
+        self.gallery = GallerySync(self._browser_tool)
         self.futgg_content = FutggContentClient()
         self.mcp = MCPServer(self)
         self._execution_lock = threading.Lock()
@@ -235,6 +237,16 @@ class FC27Daemon:
                 return self._envelope(
                     "ea_webapp", self.squads.normalize(raw, options)
                 )
+            if name == "sync_gallery":
+                with self._execution_lock:
+                    identity = AccountReader(self.bridge).identity()
+                    self.accounts.activate(identity)
+                    job = self.gallery.start(self.accounts.active)
+                return self._envelope("ea_webapp", job, complete=False)
+            if name == "gallery_query":
+                runtime = self.accounts.active
+                data = self.gallery.query(runtime, arguments.get("offset", 0), arguments.get("limit", 50))
+                return self._envelope("runtime", data, complete=data["snapshot_at"] is not None)
             if name == "sync_club":
                 if not self.bridge.health()["connected"]:
                     raise FC27Error(

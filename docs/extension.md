@@ -29,6 +29,12 @@ No localhost bridge page or extension ID is required. Raw `X-UT-SID` and `X-UT-P
 - A complete explicit post-action synchronization suppresses a redundant event-triggered run.
 - Browser request delivery is requeued when the long-poll HTTP connection closes before the daemon writes the response.
 
+## FUT Gallery
+
+With the bridge connected and the EA Web App signed in, open http://127.0.0.1:3926/ and select **Sync FUT Gallery**. Keep the Web App tab open while the status page displays progress. The daemon stores the latest successful scan under the selected Persona's account directory. MCP clients can start the same sync with `sync_gallery` and read progress and registered cards with `gallery_query`.
+
+Gallery sync reads card registration and per-card grading scores. Set grades, token balances, and rewards are outside this sync.
+
 ## Responsibilities
 
 The extension owns:

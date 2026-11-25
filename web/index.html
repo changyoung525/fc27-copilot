@@ -14,12 +14,58 @@
     <p>fc27d: <b id="daemonState" class="bad">checking</b></p>
     <p>Extension bridge: <b id="bridgeState" class="bad">checking</b></p>
     <p><small>The extension connects directly to this server. Open the FC27 Web App and sign in; this page is optional.</small></p>
+    <p><button type="button" id="syncGallery">Sync FUT Gallery</button></p>
+    <p id="galleryStatus" role="status"></p>
     <pre id="health"></pre>
   </div>
 <script>
 const daemonState=document.getElementById('daemonState');
 const bridgeState=document.getElementById('bridgeState');
 const health=document.getElementById('health');
+const syncGallery=document.getElementById('syncGallery');
+const galleryStatus=document.getElementById('galleryStatus');
+let startingGallery=false;
+async function galleryTool(name, args={}){
+  const response=await fetch('/mcp',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}}),
+  });
+  const reply=await response.json();
+  const result=reply.result?.structuredContent;
+  if(!result?.ok) throw new Error(result?.error?.message ?? reply.error?.message ?? 'Gallery request failed.');
+  return result.data;
+}
+async function refreshGallery(){
+  if(startingGallery) return;
+  const data=await galleryTool('gallery_query',{limit:1});
+  if(startingGallery) return;
+  const {sync,snapshot_at,total}=data;
+  const snapshot=snapshot_at===null?'':' Last saved: '+total+' cards ('+snapshot_at+').';
+  syncGallery.disabled=sync.state==='running';
+  if(sync.state==='running'){
+    galleryStatus.textContent='Syncing Gallery… '+sync.scanned+' cards checked.'+snapshot;
+  }else if(sync.state==='failed'){
+    galleryStatus.textContent=sync.error.message+snapshot;
+  }else{
+    galleryStatus.textContent=snapshot_at===null?'No Gallery sync saved yet.':snapshot.trim();
+  }
+}
+syncGallery.addEventListener('click',async()=>{
+  startingGallery=true;
+  syncGallery.disabled=true;
+  galleryStatus.textContent='Starting Gallery sync…';
+  try{
+    await galleryTool('sync_gallery');
+  }catch(error){
+    galleryStatus.textContent=error.message;
+    syncGallery.disabled=false;
+    return;
+  }finally{
+    startingGallery=false;
+  }
+  refreshGallery().catch(error=>{galleryStatus.textContent=error.message;});
+});
 async function refresh(){
   try{
     const response=await fetch('/health',{cache:'no-store'});
@@ -35,6 +81,7 @@ async function refresh(){
     daemonState.className='bad';
     health.textContent=error.message;
   }
+  await refreshGallery().catch(()=>{});
 }
 refresh();
 setInterval(refresh,3000);

@@ -90,7 +90,8 @@ if (!pageInject.includes('async saveSquadTactics(params)')) errors.push('squad t
 if (!pageInject.includes("const mutationPaths = ['/auctionhouse', '/item', '/tradepile', '/squad'")) errors.push('squad mutation observation missing');
 if (!pageInject.includes('requestSlotsByCategory')) errors.push('available evolution category reader missing');
 
-for (const file of files.filter((f) => f.endsWith('.js') && !f.endsWith('content/page-inject.js'))) {
+const pageInjectPath = path.join(extension, 'content', 'page-inject.js');
+for (const file of files.filter((f) => f.endsWith('.js') && f !== pageInjectPath)) {
   const text = await fs.readFile(file, 'utf8');
   if (text.includes('X-UT-SID') || text.includes('X-UT-PHISHING-TOKEN')) {
     errors.push(`${path.relative(root, file)} handles raw EA session headers outside page context`);
