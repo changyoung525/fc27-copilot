@@ -46,6 +46,25 @@ class GallerySyncTests(unittest.TestCase):
             self.assertEqual(saved["cards"][0]["card_ea_id"], 13)
 
     @patch("fc27.gallery.time.sleep")
+    def test_accepts_confirmed_repeated_tail_after_pagination_advances(self, _sleep):
+        first = {"cards": [{"card_ea_id": 11, "is_collected": False}]}
+        second = {"cards": [{"card_ea_id": 12, "is_collected": True}]}
+        read = Mock(side_effect=[first, second, second, second])
+        sync = GallerySync(read)
+        cards, scanned = sync._read("123")
+        self.assertEqual(scanned, 2)
+        self.assertEqual([card["card_ea_id"] for card in cards], [12])
+        self.assertEqual([call.args[1]["offset"] for call in read.call_args_list], [0, 1, 2, 3])
+
+    @patch("fc27.gallery.time.sleep")
+    def test_rejects_search_that_never_moves_past_the_first_page(self, _sleep):
+        page = {"cards": [{"card_ea_id": 11, "is_collected": True}]}
+        sync = GallerySync(Mock(return_value=page))
+        with self.assertRaises(FC27Error) as raised:
+            sync._read("123")
+        self.assertEqual(raised.exception.details["reason"], "pagination_did_not_advance")
+
+    @patch("fc27.gallery.time.sleep")
     def test_does_not_commit_when_collection_flags_are_missing(self, _sleep):
         sync = GallerySync(Mock(side_effect=[
             {"cards": [{"card_ea_id": 11, "is_collected": None}]},

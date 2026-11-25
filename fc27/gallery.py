@@ -92,14 +92,19 @@ class GallerySync:
         collected = {}
         offset = 0
         has_collection_flags = False
+        advancing_pages = 0
+        repeated_page = False
+        end_reason = "page_limit"
         for _ in range(500):
             page = self._read_page(persona_id, offset)
             rows = page.get("cards") if isinstance(page, dict) else None
             if not isinstance(rows, list):
+                end_reason = "missing_cards"
                 break
             if not rows:
                 if has_collection_flags:
                     return [collected[card_id] for card_id in sorted(collected)], len(seen)
+                end_reason = "missing_collection_flags"
                 break
             previous_count = len(seen)
             for card in rows:
@@ -112,16 +117,28 @@ class GallerySync:
                 if flag is True:
                     collected[card_id] = card
             if len(seen) == previous_count:
-                break
+                if advancing_pages < 2:
+                    end_reason = "pagination_did_not_advance"
+                    break
+                if repeated_page:
+                    if has_collection_flags:
+                        return [collected[card_id] for card_id in sorted(collected)], len(seen)
+                    end_reason = "missing_collection_flags"
+                    break
+                # EA can replay known cards at the tail. Confirm with the next offset.
+                repeated_page = True
+            else:
+                advancing_pages += 1
+                repeated_page = False
             offset += len(rows)
             with self._lock:
-                self._job["scanned"] = len(seen)
+                self._job.update(scanned=len(seen), collected=len(collected))
             time.sleep(0.9)
         raise FC27Error(
             "GALLERY_SCAN_INCOMPLETE",
             "EA did not provide a complete card scan with Gallery collection flags.",
             retryable=True,
-            details={"offset": offset, "scanned": len(seen)},
+            details={"offset": offset, "scanned": len(seen), "reason": end_reason},
         )
 
     def _read_page(self, persona_id, offset):
